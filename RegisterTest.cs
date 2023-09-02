@@ -1,4 +1,5 @@
 using System.Transactions;
+using LightCV.BL.Exception;
 using LightCV.DAL.Models;
 using LightCVTest.Helpers;
 
@@ -18,21 +19,30 @@ public class RegisterTest : Helpers.BaseTest
         {
             string email = Guid.NewGuid().ToString() + "@test.com";
             //validate: should not be in DB
-            var emailValidationResult = await authBl.ValidateEmail(email);
-            Assert.IsNull(emailValidationResult);
+            authBl.ValidateEmail(email).GetAwaiter().GetResult();
 
             //create user
-            int userId = await authBl.CreatUser(new UserModel()
+            var userId = await authBl.CreatUser(new UserModel()
             {
                 Email = email,
                 Password = "qwe1234"
             });
             
             Assert.Greater(userId, 0);
+
+            var userDalResult = await authDal.GetUserById(userId);
+            Assert.AreEqual(email, userDalResult.Email);
+            Assert.NotNull(userDalResult.Salt);
+            
+            var userByEmailDalResult = await authDal.GetUserByEmail(email);
+            Assert.AreEqual(email, userByEmailDalResult.Email);
+
             
             //validate: should  be in DB
-            var userValidationResult = await authBl.ValidateEmail(email);
-            Assert.IsNotNull(userValidationResult);
+            Assert.Throws<DuplicateEmailException>(delegate { authBl.ValidateEmail(email).GetAwaiter().GetResult(); });
+
+            string encPassword = encrypt.HashPassword("qwe1234", userByEmailDalResult.Salt);
+            Assert.AreEqual(encPassword, userByEmailDalResult.Password);
         }
         Assert.Pass();
     }
